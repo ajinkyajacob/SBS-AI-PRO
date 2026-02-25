@@ -25,18 +25,43 @@ export function useDepthEstimation() {
       }
       setDevice(currentDevice);
 
-      const newPipe = await pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', {
-        device: currentDevice as any,
-        dtype: dtype as any,
-        progress_callback: (p: any) => {
-          if (p.status === 'progress') {
-            setProgress(Math.round(p.progress));
+      let newPipe: any = null;
+      
+      try {
+        newPipe = await (pipeline as any)('depth-estimation', 'onnx-community/depth-anything-v2-small', {
+          device: currentDevice as any,
+          dtype: dtype as any,
+          progress_callback: (p: any) => {
+            if (p.status === 'progress') {
+              setProgress(Math.round(p.progress));
+            }
           }
+        });
+      } catch (e) {
+        if (currentDevice === 'webgpu') {
+          console.warn('WebGPU failed, falling back to WASM', e);
+          currentDevice = 'wasm';
+          setDevice(currentDevice);
+          newPipe = await (pipeline as any)('depth-estimation', 'onnx-community/depth-anything-v2-small', {
+            device: currentDevice as any,
+            dtype: dtype as any,
+            progress_callback: (p: any) => {
+              if (p.status === 'progress') {
+                setProgress(Math.round(p.progress));
+              }
+            }
+          });
+        } else {
+          throw e;
         }
-      });
+      }
 
-      pipeRef.current = newPipe;
-      setStatus('ready');
+      if (newPipe) {
+        pipeRef.current = newPipe;
+        setStatus('ready');
+      } else {
+        throw new Error('Failed to create pipeline');
+      }
     } catch (err) {
       console.error('Failed to initialize depth pipeline:', err);
       setStatus('error');
